@@ -1,4 +1,5 @@
-﻿using AgroSolutions.Identity.Web.Application.Interfaces;
+﻿using AgroSolutions.Identity.Web.Application.DTOs;
+using AgroSolutions.Identity.Web.Application.Interfaces;
 using AgroSolutions.Identity.Web.Domain.Models;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
@@ -14,64 +15,99 @@ public class TelemetryApiService : ITelemetryService
         _http = http;
     }
 
-    public async Task<List<Telemetry>> GetHistoryAsync(string sensorId, int hoursBack)
+    public async Task<List<Telemetry>> SearchAsync(TelemetryFilter filter)
     {
         try
         {
-            var startDate = DateTime.UtcNow.AddHours(-hoursBack).ToString("yyyy-MM-ddTHH:mm:ssZ");
-            var url = $"api/History?sensor_id={sensorId}&start_date={startDate}";
+            var queryParams = new List<string>();
+
+            if (!string.IsNullOrWhiteSpace(filter.SensorId))
+                queryParams.Add($"sensor_id={filter.SensorId}");
+
+            if (!string.IsNullOrWhiteSpace(filter.FieldId))
+                queryParams.Add($"field_id={filter.FieldId}");
+
+            if (!string.IsNullOrWhiteSpace(filter.SensorType))
+                queryParams.Add($"type_sensor={filter.SensorType}");
+
+            if (filter.StartDate.HasValue)
+                queryParams.Add($"start_date={filter.StartDate.Value:yyyy-MM-ddTHH:mm:ssZ}");
+
+            if (filter.EndDate.HasValue)
+                queryParams.Add($"end_date={filter.EndDate.Value:yyyy-MM-ddTHH:mm:ssZ}");
+
+            if (!queryParams.Any()) return new List<Telemetry>();
+
+            var url = $"api/History?{string.Join("&", queryParams)}";
+            Console.WriteLine($"[TelemetryApiService] GET: {url}");
 
             var jsonArray = await _http.GetFromJsonAsync<JsonNode[]>(url);
 
-            if (jsonArray == null) return new List<Telemetry>();
+            if (jsonArray == null || jsonArray.Length == 0) return new List<Telemetry>();
 
-            var result = new List<Telemetry>();
+            return ParseJson(jsonArray);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ERRO API]: {ex.Message}");
+            return new List<Telemetry>();
+        }
+    }
 
-            foreach (var item in jsonArray)
+    private List<Telemetry> ParseJson(JsonNode[] jsonArray)
+    {
+        var result = new List<Telemetry>();
+        foreach (var item in jsonArray)
+        {
+            try
             {
-                var t = new Telemetry
-                {
-                    Id = item["id"]?.ToString() ?? "",
-                    SensorId = item["sensorId"]?.ToString() ?? "",
-                    Timestamp = item["timestamp"]?.GetValue<DateTime>() ?? DateTime.MinValue,
-                    FieldId = item["fieldId"]?.GetValue<Guid>() ?? Guid.Empty,
-                    Type = item["type"]?.ToString() ?? "",
-                    Email = item["email"]?.ToString()
-                };
+                var t = new Telemetry();
+
+                t.Id = GetString(item, "id");
+                t.SensorId = GetString(item, "sensorId");
+                t.Timestamp = item["timestamp"]?.GetValue<DateTime>() ?? DateTime.MinValue;
+                t.FieldId = item["fieldId"]?.GetValue<Guid>() ?? Guid.Empty;
+                t.Type = GetString(item, "sensorTypeDescription", "type", "sensorType").ToLower();
+                t.Email = GetString(item, "email");
 
                 var data = item["data"];
                 if (data != null)
                 {
-                    t.SoilMoisturePercent = (double?)data["soilMoisturePercent"];
-                    t.SoilPh = (double?)data["soilPh"];
-                    if (data["nutrients"] is JsonNode nut)
-                    {
-                        t.Nitrogen = (double?)nut["nitrogen"];
-                        t.Phosphorus = (double?)nut["phosphorus"];
-                        t.Potassium = (double?)nut["potassium"];
-                    }
+                    t.SoilMoisturePercent = GetDouble(data, "soilMoisturePercent");
+                    t.SoilPh = GetDouble(data, "soilPh");
+                    t.Nitrogen = GetDouble(data["nutrients"], "nitrogen"); 
 
-                    t.TempCelsius = (double?)data["tempCelsius"];
-                    t.HumidityPercent = (double?)data["humidityPercent"];
-                    t.WindSpeedKmh = (double?)data["windSpeedKmh"];
-                    t.RainMmLastHour = (double?)data["rainMmLastHour"];
-                    t.WindDirection = data["windDirection"]?.ToString();
-                    t.DewPoint = (double?)data["dewPoint"];
+                    t.TempCelsius = GetDouble(data, "tempCelsius") ?? GetDouble(data, "temperatura"); 
+                    t.RainMmLastHour = GetDouble(data, "rainMmLastHour");
+                    t.HumidityPercent = GetDouble(data, "humidityPercent");
 
-                    t.FillLevelPercent = (double?)data["fillLevelPercent"];
-                    t.Co2Ppm = (double?)data["co2Ppm"];
-                    t.AvgTempCelsius = (double?)data["avgTempCelsius"];
+                    t.Co2Ppm = GetDouble(data, "co2Ppm");
+                    t.FillLevelPercent = GetDouble(data, "fillLevelPercent");
                 }
-
                 result.Add(t);
             }
+            catch { }
+        }
+        return result.OrderBy(x => x.Timestamp).ToList();
+    }
 
-            return result.OrderByDescending(x => x.Timestamp).ToList();
-        }
-        catch (Exception ex)
+    private string GetString(JsonNode? node, params string[] keys)
+    {
+        if (node == null) return "";
+        foreach (var key in keys)
         {
-            Console.WriteLine($"Erro ao processar dados da API: {ex.Message}");
-            return new List<Telemetry>();
+            if (node[key] != null) return node[key]!.ToString();
+            var pascal = char.ToUpper(key[0]) + key.Substring(1);
+            if (node[pascal] != null) return node[pascal]!.ToString();
         }
+        return "";
+    }
+
+    private double? GetDouble(JsonNode? node, string key)
+    {
+        if (node == null) return null;
+        var val = node[key] ?? node[key.ToLower()];
+        if (val == null) return null;
+        try { return val.GetValue<double>(); } catch { return null; }
     }
 }

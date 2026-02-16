@@ -1,113 +1,164 @@
 ﻿@page "/"
+@using AgroSolutions.Identity.Web.Application.DTOs
 @using AgroSolutions.Identity.Web.Application.Interfaces
 @using AgroSolutions.Identity.Web.Domain.Models
 @inject ITelemetryService TelemetryService
 @inject ISnackbar Snackbar
 
-<MudText Typo="Typo.h4" GutterBottom="true">Painel do Produtor</MudText>
+<MudText Typo="Typo.h4" Class="mb-4">Monitoramento Inteligente</MudText>
 
-<MudGrid>
-    <MudItem xs="12" md="4">
-        <MudTextField @bind-Value="sensorId" Label="ID do Sensor" Variant="Variant.Outlined" />
-    </MudItem>
-    <MudItem xs="12" md="4">
-        <MudSelect T="int" Label="Período" @bind-Value="horas" Variant="Variant.Outlined">
-            <MudSelectItem Value="12">12 Horas</MudSelectItem>
-            <MudSelectItem Value="24">24 Horas</MudSelectItem>
-            <MudSelectItem Value="168">7 Dias</MudSelectItem>
-        </MudSelect>
-    </MudItem>
-    <MudItem xs="12" md="4">
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Carregar" FullWidth="true" Class="mt-2">
-            Buscar Dados
-        </MudButton>
-    </MudItem>
+<MudPaper Elevation="3" Class="pa-4 mb-4">
+    <MudGrid>
+        <MudItem xs="12" md="3">
+            <MudTextField @bind-Value="filter.FieldId" Label="ID do Talhão (FieldId)" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Grass" />
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudTextField @bind-Value="filter.SensorId" Label="ID do Sensor" Variant="Variant.Outlined" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Sensors" />
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudSelect T="string" Label="Tipo de Sensor" @bind-Value="filter.SensorType" Variant="Variant.Outlined" Clearable="true">
+                <MudSelectItem Value="@("solo")">Solo</MudSelectItem>
+                <MudSelectItem Value="@("meteorologica")">Meteorológica</MudSelectItem>
+                <MudSelectItem Value="@("silo")">Silo</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudDateRangePicker Label="Período" @bind-DateRange="dateRange" Variant="Variant.Outlined" />
+        </MudItem>
+        <MudItem xs="12" Class="d-flex justify-end">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="BuscarDados" Size="Size.Large" StartIcon="@Icons.Material.Filled.Search">
+                Filtrar Resultados
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
 
-    <MudItem xs="12">
-        <MudPaper Class="pa-4">
-            @if (loading)
-            {
-                <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
-            }
-            else if (dados.Count == 0)
-            {
-                <MudAlert Severity="Severity.Info">Nenhum dado encontrado.</MudAlert>
-            }
-            else
-            {
-                <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true">
-                    <MudTabPanel Text="Umidade (Solo)">
-                        <MudChart ChartType="ChartType.Line" ChartSeries="@SeriesSolo" XAxisLabels="@Labels" Width="100%" Height="350px" />
-                    </MudTabPanel>
-                    <MudTabPanel Text="Temperatura (Clima)">
-                        <MudChart ChartType="ChartType.Line" ChartSeries="@SeriesClima" XAxisLabels="@Labels" Width="100%" Height="350px" />
-                    </MudTabPanel>
-                    <MudTabPanel Text="CO2 (Silo)">
-                        <MudChart ChartType="ChartType.Line" ChartSeries="@SeriesSilo" XAxisLabels="@Labels" Width="100%" Height="350px" />
-                    </MudTabPanel>
-                </MudTabs>
-            }
-        </MudPaper>
-    </MudItem>
+@if (loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+}
+else if (dadosAgrupados == null || !dadosAgrupados.Any())
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Utilize os filtros acima para buscar dados.</MudAlert>
+}
+else
+{
+    @foreach (var grupoSensor in dadosAgrupados)
+    {
+        var sensorId = grupoSensor.Key;
+        var primeiraLeitura = grupoSensor.First();
+        var tipoSensor = primeiraLeitura.Type?.ToLower() ?? "desconhecido";
+        var qtdLeituras = grupoSensor.Count();
 
-    <MudItem xs="12">
-        <MudTable Items="@dados" Hover="true" Striped="true" Dense="true">
-            <HeaderContent>
-                <MudTh>Data/Hora</MudTh>
-                <MudTh>Tipo</MudTh>
-                <MudTh>Resumo</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd DataLabel="Data">@context.Timestamp.ToLocalTime().ToString("g")</MudTd>
-                <MudTd DataLabel="Tipo">@context.Type.ToUpper()</MudTd>
-                <MudTd DataLabel="Resumo">@context.Summary</MudTd>
-            </RowTemplate>
-        </MudTable>
-    </MudItem>
-</MudGrid>
+        <MudCard Class="mb-4" Elevation="4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Sensor: @sensorId</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Tipo: @tipoSensor.ToUpper() | Registros: @qtdLeituras | Talhão: @primeiraLeitura.FieldId</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudChip T="string" Color="@GetColorByType(tipoSensor)" Size="Size.Small">@tipoSensor</MudChip>
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                @if (tipoSensor == "solo")
+                {
+                    <MudChart ChartType="ChartType.Line" ChartSeries="@GetSeriesSolo(grupoSensor)" XAxisLabels="@GetLabels(grupoSensor)" Width="100%" Height="300px" />
+                }
+                else if (tipoSensor == "meteorologica" || tipoSensor == "clima")
+                {
+                    <MudChart ChartType="ChartType.Line" ChartSeries="@GetSeriesClima(grupoSensor)" XAxisLabels="@GetLabels(grupoSensor)" Width="100%" Height="300px" />
+                }
+                else if (tipoSensor == "silo")
+                {
+                    <MudChart ChartType="ChartType.Line" ChartSeries="@GetSeriesSilo(grupoSensor)" XAxisLabels="@GetLabels(grupoSensor)" Width="100%" Height="300px" />
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Warning">Tipo de sensor não suportado para gráficos: @tipoSensor</MudAlert>
+                }
+            </MudCardContent>
+        </MudCard>
+    }
+}
 
 @code {
-    private string sensorId = "d3b07384-d9a1-4d43-9833-28151b753703";
-    private int horas = 24;
+    private TelemetryFilter filter = new();
+    private DateRange dateRange = new DateRange(DateTime.Now.AddDays(-1), DateTime.Now);
     private bool loading = false;
-    private List<Telemetry> dados = new();
 
-    public List<ChartSeries> SeriesSolo = new();
-    public List<ChartSeries> SeriesClima = new();
-    public List<ChartSeries> SeriesSilo = new();
-    public string[] Labels = { };
+    // Agrupamento: Lista de (Chave=SensorId, Valores=Lista de Leituras)
+    private IEnumerable<IGrouping<string, Telemetry>>? dadosAgrupados;
 
     protected override async Task OnInitializedAsync()
     {
-        await Carregar();
+        // Pré-carrega um ID se quiser facilitar o teste
+        filter.FieldId = "a1b2c3d4-e5f6-7890-1234-567890abcdef";
+        await BuscarDados();
     }
 
-    private async Task Carregar()
+    private async Task BuscarDados()
     {
         loading = true;
-        dados = await TelemetryService.GetHistoryAsync(sensorId, horas);
 
-        if (dados.Any()) MontarGraficos();
+        // Configura datas do DateRangePicker para o filtro
+        filter.StartDate = dateRange.Start?.Date;
+        filter.EndDate = dateRange.End?.Date.AddDays(1).AddTicks(-1); // Final do dia
+
+        var resultado = await TelemetryService.SearchAsync(filter);
+
+        if (resultado.Any())
+        {
+            // A MÁGICA ACONTECE AQUI: Agrupamos tudo por SensorId
+            dadosAgrupados = resultado.GroupBy(x => x.SensorId);
+            Snackbar.Add($"{resultado.Count} registros de {dadosAgrupados.Count()} sensores encontrados.", Severity.Success);
+        }
+        else
+        {
+            dadosAgrupados = null;
+            Snackbar.Add("Nenhum dado encontrado para os filtros.", Severity.Warning);
+        }
 
         loading = false;
     }
 
-    private void MontarGraficos()
+    // --- Helpers de Gráficos (Recebem o GRUPO específico do sensor) ---
+
+    private string[] GetLabels(IEnumerable<Telemetry> dados)
+        => dados.OrderBy(x => x.Timestamp).Select(x => x.Timestamp.ToLocalTime().ToString("HH:mm")).ToArray();
+
+    private List<ChartSeries> GetSeriesSolo(IEnumerable<Telemetry> dados)
     {
-        var ordenados = dados.OrderBy(x => x.Timestamp).ToList();
-        Labels = ordenados.Select(x => x.Timestamp.ToLocalTime().ToString("HH:mm")).ToArray();
-
-        SeriesSolo = new List<ChartSeries> {
-            new ChartSeries { Name = "Umidade %", Data = ordenados.Select(x => x.SoilMoisturePercent ?? 0).ToArray() }
-        };
-
-        SeriesClima = new List<ChartSeries> {
-            new ChartSeries { Name = "Temp °C", Data = ordenados.Select(x => x.TempCelsius ?? 0).ToArray() },
-            new ChartSeries { Name = "Chuva mm", Data = ordenados.Select(x => x.RainMmLastHour ?? 0).ToArray() }
-        };
-
-        SeriesSilo = new List<ChartSeries> {
-            new ChartSeries { Name = "CO2 ppm", Data = ordenados.Select(x => x.Co2Ppm ?? 0).ToArray() }
+        var ordenado = dados.OrderBy(x => x.Timestamp).ToList();
+        return new List<ChartSeries> {
+            new ChartSeries { Name = "Umidade %", Data = ordenado.Select(x => x.SoilMoisturePercent ?? 0).ToArray() },
+            new ChartSeries { Name = "pH", Data = ordenado.Select(x => x.SoilPh ?? 0).ToArray() }
         };
     }
+
+    private List<ChartSeries> GetSeriesClima(IEnumerable<Telemetry> dados)
+    {
+        var ordenado = dados.OrderBy(x => x.Timestamp).ToList();
+        return new List<ChartSeries> {
+            new ChartSeries { Name = "Temp °C", Data = ordenado.Select(x => x.TempCelsius ?? 0).ToArray() },
+            new ChartSeries { Name = "Chuva mm", Data = ordenado.Select(x => x.RainMmLastHour ?? 0).ToArray() }
+        };
+    }
+
+    private List<ChartSeries> GetSeriesSilo(IEnumerable<Telemetry> dados)
+    {
+        var ordenado = dados.OrderBy(x => x.Timestamp).ToList();
+        return new List<ChartSeries> {
+            new ChartSeries { Name = "CO2 ppm", Data = ordenado.Select(x => x.Co2Ppm ?? 0).ToArray() },
+            new ChartSeries { Name = "Temp Interna °C", Data = ordenado.Select(x => x.AvgTempCelsius ?? 0).ToArray() }
+        };
+    }
+
+    private Color GetColorByType(string type) => type switch
+    {
+        "solo" => Color.Success,
+        "silo" => Color.Warning,
+        "meteorologica" => Color.Info,
+        _ => Color.Default
+    };
 }
