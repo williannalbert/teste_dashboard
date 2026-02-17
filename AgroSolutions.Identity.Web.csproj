@@ -15,7 +15,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Presentation\Components\" />
     <Folder Include="Presentation\Shared\" />
     <Folder Include="wwwroot\sample-data\" />
   </ItemGroup>

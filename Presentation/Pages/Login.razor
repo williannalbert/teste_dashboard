@@ -1,0 +1,101 @@
+﻿@page "/login"
+@layout AgroSolutions.Identity.Web.Presentation.Layout.LoginLayout
+
+@using AgroSolutions.Identity.Web.Application.DTOs
+@using AgroSolutions.Identity.Web.Application.Interfaces
+@using AgroSolutions.Identity.Web.Infrastructure.Auth
+@using Microsoft.AspNetCore.Components.Authorization
+@inject IAuthService AuthService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavManager
+@inject ISnackbar Snackbar
+
+<MudCard Elevation="4" Class="pa-4" Style="width: 400px;">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h5" Align="Align.Center" Color="Color.Primary" Class="mb-2">AgroSolutions</MudText>
+            <MudText Typo="Typo.body2" Align="Align.Center">Acesse o painel do produtor</MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+
+    <MudCardContent>
+        <MudForm @ref="form">
+            <MudTextField T="string"
+                          Label="E-mail"
+                          @bind-Value="loginModel.Email"
+                          InputType="InputType.Email"
+                          Variant="Variant.Outlined"
+                          Adornment="Adornment.End"
+                          AdornmentIcon="@Icons.Material.Filled.Email"
+                          Class="mb-4"
+                          Required="true" />
+
+            <MudTextField T="string"
+                          Label="Senha"
+                          @bind-Value="loginModel.Password"
+                          InputType="InputType.Password"
+                          Variant="Variant.Outlined"
+                          Adornment="Adornment.End"
+                          AdornmentIcon="@Icons.Material.Filled.Lock"
+                          Class="mb-4"
+                          Required="true" />
+        </MudForm>
+    </MudCardContent>
+
+    <MudCardActions>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   FullWidth="true"
+                   Size="Size.Large"
+                   OnClick="FazerLogin"
+                   Disabled="@loading">
+            @if (loading)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                <MudText Class="ms-2">Entrando...</MudText>
+            }
+            else
+            {
+                <MudText>ENTRAR</MudText>
+            }
+        </MudButton>
+    </MudCardActions>
+
+    <MudCardContent Class="pt-4 pb-0">
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
+            <strong>Mock:</strong> admin@agrosolutions.com <br />
+            <strong>Senha:</strong> 123456
+        </MudAlert>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    private LoginRequest loginModel = new();
+    private bool loading = false;
+    private MudForm form;
+
+    private async Task FazerLogin()
+    {
+        await form.Validate();
+        if (!form.IsValid) return;
+
+        loading = true;
+
+        var tokenResponse = await AuthService.LoginAsync(loginModel);
+
+        if (tokenResponse != null)
+        {   
+            Snackbar.Add("Login realizado com sucesso!", Severity.Success);
+
+            (AuthStateProvider as MockAuthStateProvider)?.NotifyAuthChange();
+
+            NavManager.NavigateTo("/");
+        }
+        else
+        {
+            Snackbar.Add("E-mail ou senha inválidos.", Severity.Error);
+        }
+
+        loading = false;
+    }
+}
